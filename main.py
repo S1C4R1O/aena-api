@@ -1,8 +1,11 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import requests, re
 from bs4 import BeautifulSoup
 
 app = Flask(__name__)
+CORS(app)                    #  ←  habilita CORS para cualquier origen
+
 ACE_URL = "https://www.aena.es/es/infovuelos.html?airportCode=ACE&flightType=arrival"
 
 def scrap_ace_arrivals():
@@ -27,20 +30,21 @@ def scrap_ace_arrivals():
         })
     return vuelos
 
-def coincide(origen_celda: str, consulta: str) -> bool:
-    """Devuelve True si la consulta (IATA o texto) coincide con el string de origen de Aena."""
-    c = consulta.upper()
-    if len(c) == 3:                      # posible IATA
-        return origen_celda.startswith(c) or c in origen_celda
-    # texto → quitar espacios y comparar parcial
-    return re.sub(r"\s+", "", c) in re.sub(r"\s+", "", origen_celda)
+def coincide(origen_celda: str, q: str) -> bool:
+    q = q.upper()
+    if len(q) == 3:                                 # posible código IATA
+        return origen_celda.startswith(q) or q in origen_celda
+    return re.sub(r"\s+", "", q) in re.sub(r"\s+", "", origen_celda)
 
 @app.route("/api/buscar")
 def buscar_por_origen():
     q = request.args.get("origen", "").strip()
     if not q:
         return jsonify({"error": "Parámetro 'origen' requerido"}), 400
-    vuelos = scrap_ace_arrivals()
+    try:
+        vuelos = scrap_ace_arrivals()
+    except Exception as e:
+        return jsonify({"error": "Aena no responde", "detalle": str(e)}), 502
     filtrados = [v for v in vuelos if coincide(v["origen"], q)]
     if not filtrados:
         return jsonify({"error": "No se encontraron vuelos con ese origen"}), 404
